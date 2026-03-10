@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Super Dispatch Pricing + RUCA</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #17202a;
+      --muted: #637282;
+      --line: #d8e0e8;
+      --accent: #1d4ed8;
+      --accent2: #0f766e;
+      --danger: #b91c1c;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    p.lead {
+      margin: 0 0 24px;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+    }
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .row.one { grid-template-columns: 1fr; }
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-weight: bold;
+    }
+    input, select, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      background: white;
+    }
+    input[readonly] {
+      background: #f8fafc;
+      color: #334155;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { opacity: 0.95; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+    .metric .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .metric .value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    .status {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      display: none;
+    }
+    .status.error {
+      display: block;
+      background: #fef2f2;
+      color: var(--danger);
+      border: 1px solid #fecaca;
+    }
+    .status.ok {
+      display: block;
+      background: #ecfeff;
+      color: var(--accent2);
+      border: 1px solid #a5f3fc;
+    }
+    .mono {
+      font-family: Consolas, Monaco, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 14px;
+      border-radius: 12px;
+      overflow: auto;
+    }
+    @media (max-width: 900px) {
+      .grid, .result-grid, .row { grid-template-columns: 1fr; }
+      .wrap { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Super Dispatch Pricing + RUCA</h1>
+    <p class="lead">Get a quote and automatically show pickup/dropoff RUCA code and category.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Quote Request</h2>
+        <form id="quoteForm">
+          <div class="row">
+            <div>
+              <label for="pickupZip">Pickup ZIP</label>
+              <input id="pickupZip" maxlength="5" inputmode="numeric" required />
+            </div>
+            <div>
+              <label for="deliveryZip">Dropoff ZIP</label>
+              <input id="deliveryZip" maxlength="5" inputmode="numeric" required />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="pickupCity">Pickup City</label>
+              <input id="pickupCity" readonly />
+            </div>
+            <div>
+              <label for="pickupState">Pickup State</label>
+              <input id="pickupState" readonly />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="deliveryCity">Dropoff City</label>
+              <input id="deliveryCity" readonly />
+            </div>
+            <div>
+              <label for="deliveryState">Dropoff State</label>
+              <input id="deliveryState" readonly />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="trailerType">Trailer Type</label>
+              <select id="trailerType">
+                <option value="open">Open</option>
+                <option value="enclosed">Enclosed</option>
+              </select>
+            </div>
+            <div>
+              <label for="vehicleType">Vehicle Type</label>
+              <select id="vehicleType">
+                <option value="sedan">Sedan</option>
+                <option value="suv">SUV</option>
+                <option value="pickup">Pickup</option>
+                <option value="van">Van</option>
+                <option value="coupe">Coupe</option>
+                <option value="wagon">Wagon</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="year">Year</label>
+              <input id="year" placeholder="2023" />
+            </div>
+            <div>
+              <label for="inop">Inoperable</label>
+              <select id="inop">
+                <option value="false">No</option>
+                <option value="true">Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="make">Make</label>
+              <input id="make" placeholder="Toyota" />
+            </div>
+            <div>
+              <label for="model">Model</label>
+              <input id="model" placeholder="Camry" />
+            </div>
+          </div>
+
+          <div class="row one">
+            <div>
+              <button type="submit">Get Quote</button>
+            </div>
+          </div>
+        </form>
+        <div id="status" class="status"></div>
+      </div>
+
+      <div class="card">
+        <h2>Results</h2>
+        <div class="result-grid">
+          <div class="metric">
+            <div class="label">Price</div>
+            <div id="price" class="value">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Price / Mile</div>
+            <div id="pricePerMile" class="value">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Confidence</div>
+            <div id="confidence" class="value">—</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:16px;">
+          <div>
+            <label>Pickup RUCA</label>
+            <input id="pickupRuca" readonly />
+          </div>
+          <div>
+            <label>Pickup Category</label>
+            <input id="pickupCategory" readonly />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Dropoff RUCA</label>
+            <input id="dropoffRuca" readonly />
+          </div>
+          <div>
+            <label>Dropoff Category</label>
+            <input id="dropoffCategory" readonly />
+          </div>
+        </div>
+
+        <label>Raw Response</label>
+        <div id="rawResponse" class="mono">No quote yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const state = {
+      pickup: { city: '', state: '' },
+      delivery: { city: '', state: '' }
+    };
+
+    function setStatus(message, type = 'ok') {
+      const el = $('status');
+      el.className = `status ${type}`;
+      el.textContent = message;
+    }
+
+    function clearStatus() {
+      const el = $('status');
+      el.className = 'status';
+      el.textContent = '';
+    }
+
+    async function lookupZip(zip, prefix) {
+      const cleanZip = String(zip || '').replace(/\D/g, '').slice(0, 5);
+      if (cleanZip.length !== 5) {
+        $(prefix + 'City').value = '';
+        $(prefix + 'State').value = '';
+        return;
+      }
+
+      try {
+        const response = await fetch(`https://api.zippopotam.us/us/${cleanZip}`);
+        if (!response.ok) throw new Error('ZIP lookup failed');
+        const data = await response.json();
+        const place = data.places?.[0];
+        $(prefix + 'City').value = place?.['place name'] || '';
+        $(prefix + 'State').value = place?.['state abbreviation'] || '';
+        state[prefix === 'pickup' ? 'pickup' : 'delivery'] = {
+          city: place?.['place name'] || '',
+          state: place?.['state abbreviation'] || ''
+        };
+      } catch (_error) {
+        $(prefix + 'City').value = '';
+        $(prefix + 'State').value = '';
+      }
+    }
+
+    $('pickupZip').addEventListener('input', (e) => lookupZip(e.target.value, 'pickup'));
+    $('deliveryZip').addEventListener('input', (e) => lookupZip(e.target.value, 'delivery'));
+
+    $('quoteForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearStatus();
+
+      const pickupZip = $('pickupZip').value.trim();
+      const deliveryZip = $('deliveryZip').value.trim();
+
+      if (pickupZip.length !== 5 || deliveryZip.length !== 5) {
+        setStatus('Please enter both 5-digit ZIP codes.', 'error');
+        return;
+      }
+
+      const payload = {
+        pickup: {
+          city: $('pickupCity').value.trim(),
+          state: $('pickupState').value.trim(),
+          zip: pickupZip
+        },
+        delivery: {
+          city: $('deliveryCity').value.trim(),
+          state: $('deliveryState').value.trim(),
+          zip: deliveryZip
+        },
+        trailer_type: $('trailerType').value,
+        vehicles: [
+          {
+            type: $('vehicleType').value,
+            is_inoperable: $('inop').value === 'true',
+            make: $('make').value.trim(),
+            model: $('model').value.trim(),
+            year: $('year').value.trim()
+          }
+        ]
+      };
+
+      try {
+        setStatus('Requesting quote...', 'ok');
+        const response = await fetch('/api/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        $('rawResponse').textContent = JSON.stringify(data, null, 2);
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Quote request failed');
+        }
+
+        const pricing = data?.superdispatch?.data || {};
+        $('price').textContent = pricing.price ?? '—';
+        $('pricePerMile').textContent = pricing.price_per_mile ?? '—';
+        $('confidence').textContent = pricing.confidence ?? '—';
+
+        $('pickupRuca').value = data?.pickup_access?.ruca_code ?? 'Unknown';
+        $('pickupCategory').value = data?.pickup_access?.ruca_category ?? 'Unknown';
+        $('dropoffRuca').value = data?.dropoff_access?.ruca_code ?? 'Unknown';
+        $('dropoffCategory').value = data?.dropoff_access?.ruca_category ?? 'Unknown';
+
+        setStatus('Quote loaded successfully.', 'ok');
+      } catch (error) {
+        setStatus(error.message || 'Quote request failed.', 'error');
+      }
+    });
+  </script>
+</body>
+</html>
