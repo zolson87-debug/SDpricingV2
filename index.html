@@ -25,8 +25,51 @@
       color: var(--text);
     }
 
+    .topbar {
+      background: #0f172a;
+      color: white;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .topbar-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(255,255,255,0.82);
+      font-size: 14px;
+    }
+
+    .logout-btn {
+      border: 1px solid rgba(255,255,255,0.20);
+      background: transparent;
+      color: white;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .logout-btn:hover {
+      background: rgba(255,255,255,0.08);
+    }
+
     .wrap {
-      max-width: 1000px;
+      max-width: 1120px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -71,10 +114,6 @@
       grid-template-columns: 1fr;
     }
 
-    .row.three {
-      grid-template-columns: 1fr 1fr 1fr;
-    }
-
     label {
       display: block;
       font-size: 13px;
@@ -97,7 +136,7 @@
       color: #334155;
     }
 
-    button {
+    button.primary {
       background: var(--accent);
       color: white;
       border: none;
@@ -105,7 +144,7 @@
       font-weight: bold;
     }
 
-    button:hover {
+    button.primary:hover {
       opacity: 0.95;
     }
 
@@ -170,17 +209,31 @@
     }
 
     @media (max-width: 900px) {
-      .grid, .result-grid, .row, .row.three {
+      .grid, .result-grid, .row {
         grid-template-columns: 1fr;
       }
 
+      .topbar-inner,
       .wrap {
-        padding: 16px;
+        padding-left: 16px;
+        padding-right: 16px;
       }
     }
   </style>
 </head>
 <body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-title">Autosled Pricing Tool</div>
+      <div class="topbar-right">
+        <span id="userDisplay">Signed in</span>
+        <form method="POST" action="/logout" style="margin:0;">
+          <button type="submit" class="logout-btn">Log Out</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <div class="wrap">
     <h1>Super Dispatch Pricing + RUCA</h1>
     <p class="lead">Get a quote and automatically show pickup and dropoff RUCA code, category, and lane difficulty estimate.</p>
@@ -271,7 +324,7 @@
 
           <div class="row one">
             <div>
-              <button type="submit">Get Quote</button>
+              <button type="submit" class="primary">Get Quote</button>
             </div>
           </div>
         </form>
@@ -335,6 +388,17 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    async function loadSession() {
+      try {
+        const response = await fetch('/session');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data && data.username) {
+          $('userDisplay').textContent = `Signed in as ${data.username}`;
+        }
+      } catch (_) {}
+    }
+
     function setStatus(message, type = 'ok') {
       const el = $('status');
       el.className = `status ${type}`;
@@ -356,17 +420,9 @@
       const p = (pickupCategory || '').trim();
       const d = (dropoffCategory || '').trim();
 
-      if (!p || !d || p === 'Unknown' || d === 'Unknown') {
-        return 'Unknown';
-      }
-
-      if (p === 'Very Remote' || d === 'Very Remote') {
-        return 'Very Hard';
-      }
-
-      if (p === 'Rural' || d === 'Rural') {
-        return 'Hard';
-      }
+      if (!p || !d || p === 'Unknown' || d === 'Unknown') return 'Unknown';
+      if (p === 'Very Remote' || d === 'Very Remote') return 'Very Hard';
+      if (p === 'Rural' || d === 'Rural') return 'Hard';
 
       if (
         (p === 'Metro' && d === 'Suburban / Small City') ||
@@ -375,9 +431,7 @@
         return 'Standard';
       }
 
-      if (p === 'Metro' && d === 'Metro') {
-        return 'Easy';
-      }
+      if (p === 'Metro' && d === 'Metro') return 'Easy';
 
       return 'Standard';
     }
@@ -399,18 +453,13 @@
 
         $(prefix + 'City').value = place ? (place['place name'] || '') : '';
         $(prefix + 'State').value = place ? (place['state abbreviation'] || '') : '';
-      } catch (error) {
+      } catch (_) {
         clearZipFields(prefix);
       }
     }
 
-    $('pickupZip').addEventListener('input', (e) => {
-      lookupZip(e.target.value, 'pickup');
-    });
-
-    $('deliveryZip').addEventListener('input', (e) => {
-      lookupZip(e.target.value, 'delivery');
-    });
+    $('pickupZip').addEventListener('input', (e) => lookupZip(e.target.value, 'pickup'));
+    $('deliveryZip').addEventListener('input', (e) => lookupZip(e.target.value, 'delivery'));
 
     $('quoteForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -468,7 +517,7 @@
 
         try {
           data = JSON.parse(text);
-        } catch (parseError) {
+        } catch (_) {
           $('rawResponse').textContent = text;
           throw new Error('Server returned HTML or other non-JSON response.');
         }
@@ -479,16 +528,13 @@
           throw new Error(data.error || 'Quote request failed.');
         }
 
-        const pricing = (data && data.superdispatch && data.superdispatch.data)
-          ? data.superdispatch.data
-          : {};
+        const pricing = data?.superdispatch?.data || {};
+        const pickupCategory = data?.pickup_access?.ruca_category ?? 'Unknown';
+        const dropoffCategory = data?.dropoff_access?.ruca_category ?? 'Unknown';
 
         $('price').textContent = pricing.price ?? '—';
         $('pricePerMile').textContent = pricing.price_per_mile ?? '—';
         $('confidence').textContent = pricing.confidence ?? '—';
-
-        const pickupCategory = data?.pickup_access?.ruca_category ?? 'Unknown';
-        const dropoffCategory = data?.dropoff_access?.ruca_category ?? 'Unknown';
 
         $('pickupRuca').value = data?.pickup_access?.ruca_code ?? 'Unknown';
         $('pickupCategory').value = pickupCategory;
@@ -501,6 +547,8 @@
         setStatus(error.message || 'Quote request failed.', 'error');
       }
     });
+
+    loadSession();
   </script>
 </body>
 </html>
