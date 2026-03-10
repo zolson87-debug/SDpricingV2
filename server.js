@@ -5,6 +5,18 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
+const SUPERDISPATCH_URL =
+  process.env.SUPERDISPATCH_PRICING_URL ||
+  "https://pricing-insights.superdispatch.com/api/v1/recommended-price";
+
+const API_KEY = process.env.SUPERDISPATCH_API_KEY;
+
+if (!API_KEY) {
+  console.warn(
+    "WARNING: SUPERDISPATCH_API_KEY is not set. Requests to Super Dispatch will fail."
+  );
+}
+
 let rucaData = {};
 
 try {
@@ -18,11 +30,14 @@ try {
 
 function rucaCategory(code) {
   if (code === undefined || code === null || code === "") return "Unknown";
+
   const n = Number(code);
+
   if (n >= 1 && n <= 3) return "Metro";
   if (n >= 4 && n <= 6) return "Suburban / Small City";
   if (n >= 7 && n <= 9) return "Rural";
   if (n === 10) return "Very Remote";
+
   return "Unknown";
 }
 
@@ -39,7 +54,15 @@ app.post("/quote", async (req, res) => {
     const { pickup, delivery, vehicles, trailer_type } = req.body || {};
 
     if (!pickup?.zip || !delivery?.zip) {
-      return res.status(400).json({ error: "Pickup ZIP and delivery ZIP are required." });
+      return res.status(400).json({
+        error: "Pickup ZIP and delivery ZIP are required."
+      });
+    }
+
+    if (!API_KEY) {
+      return res.status(500).json({
+        error: "Server misconfigured: SUPERDISPATCH_API_KEY is not set on the server."
+      });
     }
 
     const pickupZip = String(pickup.zip).trim();
@@ -48,11 +71,11 @@ app.post("/quote", async (req, res) => {
     const pickupRuca = rucaData[pickupZip];
     const dropRuca = rucaData[dropZip];
 
-    const sdResponse = await fetch(process.env.SUPERDISPATCH_PRICING_URL, {
+    const sdResponse = await fetch(SUPERDISPATCH_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.SUPERDISPATCH_API_KEY}`
+        "X-API-KEY": API_KEY
       },
       body: JSON.stringify({
         pickup,
@@ -90,6 +113,7 @@ app.post("/quote", async (req, res) => {
     });
   } catch (err) {
     console.error("Quote route error:", err);
+
     return res.status(500).json({
       error: "Server error",
       details: err.message
