@@ -1,128 +1,117 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
-const PORT = process.env.PORT || 10000;
-const SUPERDISPATCH_PRICING_URL =
-  process.env.SUPERDISPATCH_PRICING_URL ||
-  'https://pricing-insights.superdispatch.com/api/v1/recommended-price';
-const SUPERDISPATCH_API_KEY = process.env.SUPERDISPATCH_API_KEY || '';
-const RUCA_FILE = process.env.RUCA_FILE || path.join(__dirname, 'data', 'ruca_by_zip.json');
 
-app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
-function normalizeZip(zip) {
-  return String(zip || '').trim().slice(0, 5);
+/* ---------------------------
+   Load RUCA Data
+--------------------------- */
+
+let rucaData = {};
+
+try {
+  const rucaPath = path.join(__dirname, "ruca_by_zip.json");
+  const raw = fs.readFileSync(rucaPath);
+  rucaData = JSON.parse(raw);
+  console.log("RUCA data loaded:", Object.keys(rucaData).length, "ZIP codes");
+} catch (err) {
+  console.error("Failed to load RUCA file:", err);
 }
+
+/* ---------------------------
+   RUCA Category Logic
+--------------------------- */
 
 function rucaCategory(code) {
-  if (code >= 1 && code <= 3) return 'Metro';
-  if (code >= 4 && code <= 6) return 'Suburban / Small City';
-  if (code >= 7 && code <= 9) return 'Rural';
-  if (code === 10) return 'Very Remote';
-  return 'Unknown';
+  if (!code) return "Unknown";
+
+  if (code >= 1 && code <= 3) return "Metro";
+  if (code >= 4 && code <= 6) return "Suburban / Small City";
+  if (code >= 7 && code <= 9) return "Rural";
+  if (code === 10) return "Very Remote";
+
+  return "Unknown";
 }
 
-function safeJsonParse(filePath) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch (error) {
-    console.error(`Failed to read RUCA file at ${filePath}:`, error.message);
-    return {};
-  }
-}
+/* ---------------------------
+   Serve UI
+--------------------------- */
 
-let rucaLookup = safeJsonParse(RUCA_FILE);
-
-function getRucaInfo(zip) {
-  const normalized = normalizeZip(zip);
-  const raw = rucaLookup[normalized];
-  const code = raw === undefined || raw === null || raw === '' ? null : Number(raw);
-
-  return {
-    zip: normalized,
-    ruca_code: Number.isFinite(code) ? code : null,
-    ruca_category: Number.isFinite(code) ? rucaCategory(code) : 'Unknown'
-  };
-}
-
-app.get('/health', (_req, res) => {
-  res.json({
-    ok: true,
-    hasSuperDispatchApiKey: Boolean(SUPERDISPATCH_API_KEY),
-    rucaFile: RUCA_FILE,
-    rucaRows: Object.keys(rucaLookup).length
-  });
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-app.get('/api/ruca/:zip', (req, res) => {
-  res.json(getRucaInfo(req.params.zip));
-});
+/* ---------------------------
+   Super Dispatch Quote Proxy
+--------------------------- */
 
-app.post('/api/quote', async (req, res) => {
+app.post("/quote", async (req, res) => {
   try {
-    if (!SUPERDISPATCH_API_KEY) {
-      return res.status(500).json({
-        error: 'Missing SUPERDISPATCH_API_KEY environment variable on the server.'
-      });
-    }
+    const { pickup, delivery, vehicles, trailer_type } = req.body;
 
-    const body = req.body || {};
-    const pickupZip = normalizeZip(body?.pickup?.zip);
-    const deliveryZip = normalizeZip(body?.delivery?.zip);
+    const pickupZip = pickup.zip;
+    const dropZip = delivery.zip;
 
-    if (!pickupZip || !deliveryZip) {
-      return res.status(400).json({ error: 'Pickup ZIP and delivery ZIP are required.' });
-    }
+    const pickupRuca = rucaData[pickupZip];
+    const dropRuca = rucaData[dropZip];
 
-    const pickupRuca = getRucaInfo(pickupZip);
-    const deliveryRuca = getRucaInfo(deliveryZip);
+    const pickupCategory = rucaCategory(pickupRuca);
+    const dropCategory = rucaCategory(dropRuca);
 
-    const sdResponse = await fetch(SUPERDISPATCH_PRICING_URL, {
-      method: 'POST',
+    const sdResponse = await fetch(process.env.SUPERDISPATCH_PRICING_URL, {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': SUPERDISPATCH_API_KEY
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.SUPERDISPATCH_API_KEY}`
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        pickup,
+        delivery,
+        vehicles,
+        trailer_type
+      })
     });
 
-    const text = await sdResponse.text();
-    let parsed;
+    const data = await sdResponse.json();
 
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch (_error) {
-      parsed = { raw: text };
-    }
-
-    if (!sdResponse.ok) {
-      return res.status(sdResponse.status).json({
-        error: `Super Dispatch API error (${sdResponse.status})`,
-        details: parsed,
-        pickup_access: pickupRuca,
-        dropoff_access: deliveryRuca
-      });
-    }
-
-    return res.json({
-      superdispatch: parsed,
-      pickup_access: pickupRuca,
-      dropoff_access: deliveryRuca
+    res.json({
+      superdispatch: data,
+      pickup_access: {
+        zip: pickupZip,
+        ruca_code: pickupRuca,
+        ruca_category: pickupCategory
+      },
+      dropoff_access: {
+        zip: dropZip,
+        ruca_code: dropRuca,
+        ruca_category: dropCategory
+      }
     });
-  } catch (error) {
-    console.error('Quote request failed:', error);
-    return res.status(500).json({
-      error: 'Server error while requesting quote.',
-      details: error.message
-    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
+
+/* ---------------------------
+   Health Check
+--------------------------- */
+
+app.get("/health", (req, res) => {
+  res.send("OK");
+});
+
+/* ---------------------------
+   Start Server
+--------------------------- */
+
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-  console.log(`RUCA file: ${RUCA_FILE}`);
-  console.log(`RUCA rows loaded: ${Object.keys(rucaLookup).length}`);
+  console.log(`Server running on port ${PORT}`);
 });
