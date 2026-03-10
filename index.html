@@ -370,7 +370,7 @@
 
       try {
         setStatus('Requesting quote...', 'ok');
-        const response = await fetch('/api/quote', {
+        const response = await fetch('/quote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
