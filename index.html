@@ -243,7 +243,7 @@
           <div class="row">
             <div>
               <label for="year">Year</label>
-              <input id="year" placeholder="2023" />
+              <input id="year" type="number" inputmode="numeric" placeholder="2023" />
             </div>
             <div>
               <label for="inop">Inoperable</label>
@@ -351,9 +351,7 @@
 
       try {
         const response = await fetch(`https://api.zippopotam.us/us/${cleanZip}`);
-        if (!response.ok) {
-          throw new Error('ZIP lookup failed');
-        }
+        if (!response.ok) throw new Error('ZIP lookup failed');
 
         const data = await response.json();
         const place = data.places && data.places[0] ? data.places[0] : null;
@@ -385,6 +383,19 @@
         return;
       }
 
+      const yearValue = $('year').value.trim();
+
+      const vehicle = {
+        type: $('vehicleType').value,
+        is_inoperable: $('inop').value === 'true',
+        make: $('make').value.trim(),
+        model: $('model').value.trim()
+      };
+
+      if (yearValue !== '') {
+        vehicle.year = parseInt(yearValue, 10);
+      }
+
       const payload = {
         pickup: {
           city: $('pickupCity').value.trim(),
@@ -397,15 +408,7 @@
           zip: deliveryZip
         },
         trailer_type: $('trailerType').value,
-        vehicles: [
-          {
-            type: $('vehicleType').value,
-            is_inoperable: $('inop').value === 'true',
-            make: $('make').value.trim(),
-            model: $('model').value.trim(),
-            year: $('year').value.trim()
-          }
-        ]
+        vehicles: [vehicle]
       };
 
       try {
@@ -435,7 +438,9 @@
           throw new Error(data.error || 'Quote request failed.');
         }
 
-        const pricing = (data && data.superdispatch && data.superdispatch.data) ? data.superdispatch.data : {};
+        const pricing = (data && data.superdispatch && data.superdispatch.data)
+          ? data.superdispatch.data
+          : {};
 
         $('price').textContent = pricing.price ?? '—';
         $('pricePerMile').textContent = pricing.price_per_mile ?? '—';
