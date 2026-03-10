@@ -71,6 +71,10 @@
       grid-template-columns: 1fr;
     }
 
+    .row.three {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
     label {
       display: block;
       font-size: 13px;
@@ -166,7 +170,7 @@
     }
 
     @media (max-width: 900px) {
-      .grid, .result-grid, .row {
+      .grid, .result-grid, .row, .row.three {
         grid-template-columns: 1fr;
       }
 
@@ -179,7 +183,7 @@
 <body>
   <div class="wrap">
     <h1>Super Dispatch Pricing + RUCA</h1>
-    <p class="lead">Get a quote and automatically show pickup and dropoff RUCA code and category.</p>
+    <p class="lead">Get a quote and automatically show pickup and dropoff RUCA code, category, and lane difficulty estimate.</p>
 
     <div class="grid">
       <div class="card">
@@ -315,6 +319,13 @@
           </div>
         </div>
 
+        <div class="row one">
+          <div>
+            <label for="laneDifficulty">Lane Difficulty Estimate</label>
+            <input id="laneDifficulty" readonly />
+          </div>
+        </div>
+
         <label for="rawResponse">Raw Response</label>
         <div id="rawResponse" class="mono">No quote yet.</div>
       </div>
@@ -339,6 +350,36 @@
     function clearZipFields(prefix) {
       $(prefix + 'City').value = '';
       $(prefix + 'State').value = '';
+    }
+
+    function calculateLaneDifficulty(pickupCategory, dropoffCategory) {
+      const p = (pickupCategory || '').trim();
+      const d = (dropoffCategory || '').trim();
+
+      if (!p || !d || p === 'Unknown' || d === 'Unknown') {
+        return 'Unknown';
+      }
+
+      if (p === 'Very Remote' || d === 'Very Remote') {
+        return 'Very Hard';
+      }
+
+      if (p === 'Rural' || d === 'Rural') {
+        return 'Hard';
+      }
+
+      if (
+        (p === 'Metro' && d === 'Suburban / Small City') ||
+        (p === 'Suburban / Small City' && d === 'Metro')
+      ) {
+        return 'Standard';
+      }
+
+      if (p === 'Metro' && d === 'Metro') {
+        return 'Easy';
+      }
+
+      return 'Standard';
     }
 
     async function lookupZip(zip, prefix) {
@@ -446,10 +487,14 @@
         $('pricePerMile').textContent = pricing.price_per_mile ?? '—';
         $('confidence').textContent = pricing.confidence ?? '—';
 
+        const pickupCategory = data?.pickup_access?.ruca_category ?? 'Unknown';
+        const dropoffCategory = data?.dropoff_access?.ruca_category ?? 'Unknown';
+
         $('pickupRuca').value = data?.pickup_access?.ruca_code ?? 'Unknown';
-        $('pickupCategory').value = data?.pickup_access?.ruca_category ?? 'Unknown';
+        $('pickupCategory').value = pickupCategory;
         $('dropoffRuca').value = data?.dropoff_access?.ruca_code ?? 'Unknown';
-        $('dropoffCategory').value = data?.dropoff_access?.ruca_category ?? 'Unknown';
+        $('dropoffCategory').value = dropoffCategory;
+        $('laneDifficulty').value = calculateLaneDifficulty(pickupCategory, dropoffCategory);
 
         setStatus('Quote loaded successfully.', 'ok');
       } catch (error) {
