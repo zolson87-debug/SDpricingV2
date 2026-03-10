@@ -1,14 +1,13 @@
 {
-  "name": "sd-pricing-ruca-tool",
+  "name": "sdpricingv2-ruca",
   "version": "1.0.0",
-  "private": true,
-  "description": "Super Dispatch pricing proxy with RUCA category lookup",
+  "description": "Super Dispatch pricing tool with RUCA lookup and login",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2"
