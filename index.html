@@ -103,6 +103,11 @@
       font-size: 18px;
     }
 
+    .card h3 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+
     .row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -122,16 +127,22 @@
       font-weight: bold;
     }
 
-    input, select, button {
+    input, select, button, textarea {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 10px;
       padding: 12px;
       font-size: 14px;
       background: white;
+      font-family: inherit;
     }
 
-    input[readonly] {
+    textarea {
+      resize: vertical;
+      min-height: 110px;
+    }
+
+    input[readonly], textarea[readonly] {
       background: #f8fafc;
       color: #334155;
     }
@@ -146,6 +157,23 @@
 
     button.primary:hover {
       opacity: 0.95;
+    }
+
+    button.secondary {
+      background: #eef4ff;
+      color: var(--accent);
+      border: 1px solid #c7d7fe;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button.secondary:hover {
+      background: #e3edff;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     .result-grid {
@@ -208,6 +236,19 @@
       min-height: 180px;
     }
 
+    .subcard {
+      margin-top: 20px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: -2px;
+      margin-bottom: 12px;
+    }
+
     @media (max-width: 900px) {
       .grid, .result-grid, .row {
         grid-template-columns: 1fr;
@@ -236,7 +277,7 @@
 
   <div class="wrap">
     <h1>Super Dispatch Pricing + RUCA</h1>
-    <p class="lead"><B>**THIS IS FOR REFERENCE ONLY. DO NOT RELY ON THIS SOLEY FOR GENERATING QUOTES EVEN IF CONFIDENCE % IS HIGH**</p></B>
+    <p class="lead"><b>**THIS IS FOR REFERENCE ONLY. DO NOT RELY ON THIS SOLEY FOR GENERATING QUOTES EVEN IF CONFIDENCE % IS HIGH**</b></p>
 
     <div class="grid">
       <div class="card">
@@ -381,12 +422,41 @@
 
         <label for="rawResponse">Raw Response</label>
         <div id="rawResponse" class="mono">No quote yet.</div>
+
+        <div class="subcard">
+          <h3>Central Dispatch Search</h3>
+          <div class="hint">Generate a Central Dispatch search link from the current pickup and dropoff ZIP, city, and state values.</div>
+
+          <div class="row one">
+            <div>
+              <button type="button" id="generateCDLink" class="primary">Generate Central Dispatch Link</button>
+            </div>
+          </div>
+
+          <div class="row one">
+            <div>
+              <label for="cdLinkOutput">Generated Link</label>
+              <textarea id="cdLinkOutput" readonly placeholder="Generated link will appear here..."></textarea>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <button type="button" id="openCDLink" class="secondary" disabled>Open Central Dispatch</button>
+            </div>
+            <div>
+              <button type="button" id="openSideBySide" class="secondary" disabled>Open CD + SD Side-by-Side</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
+
+    let generatedCDUrl = '';
 
     async function loadSession() {
       try {
@@ -453,13 +523,186 @@
 
         $(prefix + 'City').value = place ? (place['place name'] || '') : '';
         $(prefix + 'State').value = place ? (place['state abbreviation'] || '') : '';
+
+        persistFormState();
       } catch (_) {
         clearZipFields(prefix);
+        persistFormState();
       }
     }
 
-    $('pickupZip').addEventListener('input', (e) => lookupZip(e.target.value, 'pickup'));
-    $('deliveryZip').addEventListener('input', (e) => lookupZip(e.target.value, 'delivery'));
+    function encodeCity(city) {
+      return (city || '').trim().replace(/\s+/g, '%20');
+    }
+
+    function buildCentralDispatchUrl() {
+      const pickupCity = $('pickupCity').value.trim();
+      const pickupState = $('pickupState').value.trim();
+      const pickupZip = $('pickupZip').value.trim();
+
+      const deliveryCity = $('deliveryCity').value.trim();
+      const deliveryState = $('deliveryState').value.trim();
+      const deliveryZip = $('deliveryZip').value.trim();
+
+      if (!pickupCity || !pickupState || !pickupZip || !deliveryCity || !deliveryState || !deliveryZip) {
+        setStatus('Missing city/state data. Enter valid ZIP codes first.', 'error');
+        return '';
+      }
+
+      const template = "https://app.centraldispatch.com/search?search=~(vC~(mn~1)~tLPW~2~opt~%27all~ofst~0~lmt~50~sF~(~(n~%27pup~d~%27ASC)~(n~%27dMA~d~%27ASC))~dBS~false~sPSO~false~sTOT~false~aR~%27All~rT~%27Open~l~(~(c~%27|**ORIGIN CITY**|~st~%27|**ORIGIN STATE**|~zC~%27|**ORIGIN ZIP**|~r~50~s~%27Pickup)~(c~%27|**DEST CITY**|~st~%27|**DEST STATE**|~zC~%27|**DEST ZIP**|~r~50~s~%27Dropoff)))";
+
+      return template
+        .replace("|**ORIGIN CITY**|", encodeCity(pickupCity))
+        .replace("|**ORIGIN STATE**|", pickupState)
+        .replace("|**ORIGIN ZIP**|", pickupZip)
+        .replace("|**DEST CITY**|", encodeCity(deliveryCity))
+        .replace("|**DEST STATE**|", deliveryState)
+        .replace("|**DEST ZIP**|", deliveryZip);
+    }
+
+    function getFormState() {
+      return {
+        pickupZip: $('pickupZip').value,
+        deliveryZip: $('deliveryZip').value,
+        pickupCity: $('pickupCity').value,
+        pickupState: $('pickupState').value,
+        deliveryCity: $('deliveryCity').value,
+        deliveryState: $('deliveryState').value,
+        trailerType: $('trailerType').value,
+        vehicleType: $('vehicleType').value,
+        year: $('year').value,
+        inop: $('inop').value,
+        make: $('make').value,
+        model: $('model').value,
+        price: $('price').textContent,
+        pricePerMile: $('pricePerMile').textContent,
+        confidence: $('confidence').textContent,
+        pickupRuca: $('pickupRuca').value,
+        pickupCategory: $('pickupCategory').value,
+        dropoffRuca: $('dropoffRuca').value,
+        dropoffCategory: $('dropoffCategory').value,
+        laneDifficulty: $('laneDifficulty').value,
+        rawResponse: $('rawResponse').textContent,
+        cdLinkOutput: $('cdLinkOutput').value,
+        generatedCDUrl
+      };
+    }
+
+    function persistFormState() {
+      try {
+        sessionStorage.setItem('autosledPricingState', JSON.stringify(getFormState()));
+      } catch (_) {}
+    }
+
+    function restoreFormState() {
+      try {
+        const raw = sessionStorage.getItem('autosledPricingState');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+
+        $('pickupZip').value = data.pickupZip || '';
+        $('deliveryZip').value = data.deliveryZip || '';
+        $('pickupCity').value = data.pickupCity || '';
+        $('pickupState').value = data.pickupState || '';
+        $('deliveryCity').value = data.deliveryCity || '';
+        $('deliveryState').value = data.deliveryState || '';
+        $('trailerType').value = data.trailerType || 'open';
+        $('vehicleType').value = data.vehicleType || 'sedan';
+        $('year').value = data.year || '';
+        $('inop').value = data.inop || 'false';
+        $('make').value = data.make || '';
+        $('model').value = data.model || '';
+
+        $('price').textContent = data.price || '—';
+        $('pricePerMile').textContent = data.pricePerMile || '—';
+        $('confidence').textContent = data.confidence || '—';
+
+        $('pickupRuca').value = data.pickupRuca || '';
+        $('pickupCategory').value = data.pickupCategory || '';
+        $('dropoffRuca').value = data.dropoffRuca || '';
+        $('dropoffCategory').value = data.dropoffCategory || '';
+        $('laneDifficulty').value = data.laneDifficulty || '';
+
+        $('rawResponse').textContent = data.rawResponse || 'No quote yet.';
+        $('cdLinkOutput').value = data.cdLinkOutput || '';
+        generatedCDUrl = data.generatedCDUrl || '';
+
+        if (generatedCDUrl) {
+          $('openCDLink').disabled = false;
+          $('openSideBySide').disabled = false;
+        }
+      } catch (_) {}
+    }
+
+    function openSideBySideWindows(cdUrl) {
+      const width = window.screen && window.screen.availWidth ? window.screen.availWidth : 1600;
+      const height = window.screen && window.screen.availHeight ? window.screen.availHeight : 900;
+      const halfWidth = Math.floor(width / 2);
+
+      const sdWindow = window.open(
+        'about:blank',
+        'sdSideBySideWindow',
+        `width=${halfWidth},height=${height},left=0,top=0,resizable=yes,scrollbars=yes`
+      );
+
+      const cdWindow = window.open(
+        'about:blank',
+        'cdSideBySideWindow',
+        `width=${width - halfWidth},height=${height},left=${halfWidth},top=0,resizable=yes,scrollbars=yes`
+      );
+
+      if (!sdWindow || !cdWindow) {
+        setStatus('Popup blocker may have prevented opening the side-by-side view.', 'error');
+        return;
+      }
+
+      sdWindow.location.href = window.location.href;
+      cdWindow.location.href = cdUrl;
+
+      try {
+        sdWindow.focus();
+      } catch (_) {}
+    }
+
+    $('pickupZip').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
+      lookupZip(e.target.value, 'pickup');
+      persistFormState();
+    });
+
+    $('deliveryZip').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
+      lookupZip(e.target.value, 'delivery');
+      persistFormState();
+    });
+
+    ['trailerType', 'vehicleType', 'year', 'inop', 'make', 'model'].forEach((id) => {
+      $(id).addEventListener('input', persistFormState);
+      $(id).addEventListener('change', persistFormState);
+    });
+
+    $('generateCDLink').addEventListener('click', () => {
+      const url = buildCentralDispatchUrl();
+      if (!url) return;
+
+      generatedCDUrl = url;
+      $('cdLinkOutput').value = url;
+      $('openCDLink').disabled = false;
+      $('openSideBySide').disabled = false;
+      persistFormState();
+      setStatus('Central Dispatch link generated.', 'ok');
+    });
+
+    $('openCDLink').addEventListener('click', () => {
+      if (!generatedCDUrl) return;
+      window.open(generatedCDUrl, '_blank');
+    });
+
+    $('openSideBySide').addEventListener('click', () => {
+      if (!generatedCDUrl) return;
+      persistFormState();
+      openSideBySideWindows(generatedCDUrl);
+    });
 
     $('quoteForm').addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -519,12 +762,14 @@
           data = JSON.parse(text);
         } catch (_) {
           $('rawResponse').textContent = text;
+          persistFormState();
           throw new Error('Server returned HTML or other non-JSON response.');
         }
 
         $('rawResponse').textContent = JSON.stringify(data, null, 2);
 
         if (!response.ok) {
+          persistFormState();
           throw new Error(data.error || 'Quote request failed.');
         }
 
@@ -542,13 +787,16 @@
         $('dropoffCategory').value = dropoffCategory;
         $('laneDifficulty').value = calculateLaneDifficulty(pickupCategory, dropoffCategory);
 
+        persistFormState();
         setStatus('Quote loaded successfully.', 'ok');
       } catch (error) {
+        persistFormState();
         setStatus(error.message || 'Quote request failed.', 'error');
       }
     });
 
     loadSession();
+    restoreFormState();
   </script>
 </body>
 </html>
